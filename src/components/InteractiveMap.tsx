@@ -3,7 +3,7 @@
 import React from 'react';
 import dynamic from 'next/dynamic';
 import { MapPin } from 'lucide-react';
-import { StationData, ShapeData } from '@/app/map/actions';
+import { StationData, ShapeData } from '@/app/(site)/map/actions';
 
 // Dynamically import map component with SSR disabled to prevent window is not defined crash
 const MapComponent = dynamic(() => import('@/components/MapComponent'), {

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { StationData, ShapeData, TimetableEntry, getStationTimetable } from '@/app/map/actions';
+import { StationData, ShapeData, TimetableEntry, getStationTimetable } from '@/app/(site)/map/actions';
 import { Clock, Train, X } from 'lucide-react';
 
 interface MapComponentProps {

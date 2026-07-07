@@ -17,15 +17,14 @@ import {
   MapPin,
   Save,
   Route,
-  Compass,
   ArrowUpDown,
-  Download,
   Trash2,
-  ListFilter,
   CheckCircle2,
   AlertTriangle,
   RotateCcw,
-  Sparkles
+  Sparkles,
+  ChevronRight,
+  Maximize2
 } from 'lucide-react';
 
 // Setup Leaflet marker icon asset fallbacks to prevent broken image links
@@ -112,7 +111,7 @@ export default function RouteFixerComponent({
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Map reference & dragging
+  // Map reference
   const markerRef = useRef<L.Marker | null>(null);
 
   // Get active stop details
@@ -204,7 +203,7 @@ export default function RouteFixerComponent({
     setEditLat(lat);
     setEditLon(lon);
     setCenterCoord([lat, lon]);
-    triggerStatus('Preview coordinates updated. Click Save to database to apply.', 'info');
+    triggerStatus('Preview coordinates updated. Click Save to apply.', 'info');
   };
 
   // 4. Update coordinates from draggable marker
@@ -254,7 +253,7 @@ export default function RouteFixerComponent({
       setPreviewOsmPoints(res.points);
       const first = res.points[0];
       setCenterCoord([first.lat, first.lon]);
-      triggerStatus(`Loaded ${res.points.length} coordinates from OSM. Click Apply to shape to save.`, 'success');
+      triggerStatus(`Loaded ${res.points.length} coordinates from OSM. Click Apply to preview.`, 'success');
     } else {
       triggerStatus(res.error || 'Failed to load geometry from OSM.', 'error');
     }
@@ -265,14 +264,13 @@ export default function RouteFixerComponent({
     if (previewOsmPoints.length === 0) return;
     setEditShapePoints([...previewOsmPoints]);
     setPreviewOsmPoints([]);
-    triggerStatus('OSM geometry applied. Remember to click Save shape to commit to database.', 'info');
+    triggerStatus('OSM geometry applied. Remember to click Save shape to commit.', 'info');
   };
 
   // 9. Rebuild shape sequence from station stop order
   const handleRebuildFromStops = async () => {
     if (!selectedShapeId) return;
     
-    // Find matching route
     const routeId = selectedShapeId.replace('SHAPE_', '');
     setIsSubmitting(true);
     const res = await rebuildShapeFromStops(selectedShapeId, routeId);
@@ -286,48 +284,47 @@ export default function RouteFixerComponent({
     }
   };
 
-  // Filtered station list
+  // Filtered lists
   const filteredStops = stops.filter(s =>
     s.name.toLowerCase().includes(stopFilter.toLowerCase()) ||
     s.id.toLowerCase().includes(stopFilter.toLowerCase())
   );
 
-  // Filtered shapes list
   const filteredShapes = shapes.filter(s =>
     s.shapeId.toLowerCase().includes(shapeFilter.toLowerCase())
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="h-screen w-screen bg-slate-50 text-slate-800 flex flex-col font-sans overflow-hidden">
       
-      {/* Header Banner */}
-      <header className="bg-slate-900 border-b border-slate-800 py-4 px-6 flex justify-between items-center shadow-lg">
+      {/* Light Mode Header */}
+      <header className="bg-white border-b border-slate-200 py-3.5 px-6 flex justify-between items-center shadow-sm shrink-0">
         <div className="flex items-center gap-3">
-          <div className="bg-blue-600/10 p-2 rounded-xl border border-blue-500/30">
-            <Sparkles className="h-6 w-6 text-blue-400" />
+          <div className="bg-blue-50 p-2 rounded-xl border border-blue-100">
+            <Sparkles className="h-5.5 w-5.5 text-blue-600" />
           </div>
           <div>
-            <h1 className="font-bold text-slate-100 text-lg flex items-center gap-2">
+            <h1 className="font-bold text-slate-900 text-base flex items-center gap-2">
               Sri Lanka Railways Transit Workbench
-              <span className="text-[10px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-full font-bold tracking-wide uppercase">
+              <span className="text-[9px] bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-bold tracking-wide uppercase">
                 Admin Mode
               </span>
             </h1>
-            <p className="text-xs text-slate-400">Interactive platform mapping, coordinate geocoding overrides, and track geometry editor</p>
+            <p className="text-xs text-slate-500">Interactive platform mapping, coordinate overrides, and track geometry editor</p>
           </div>
         </div>
 
         {/* Tab switcher */}
-        <div className="bg-slate-950 p-1 rounded-xl border border-slate-800 flex gap-1">
+        <div className="bg-slate-100 p-1 rounded-xl border border-slate-200 flex gap-1">
           <button
             onClick={() => {
               setActiveTab('stations');
               setCenterCoord(null);
             }}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'stations'
-                ? 'bg-slate-900 text-white border border-slate-800 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-white text-slate-900 border border-slate-200 shadow-sm'
+                : 'text-slate-500 hover:text-slate-800'
             }`}
           >
             <MapPin className="h-3.5 w-3.5" /> Station Coordinates
@@ -337,10 +334,10 @@ export default function RouteFixerComponent({
               setActiveTab('shapes');
               setCenterCoord(null);
             }}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'shapes'
-                ? 'bg-slate-900 text-white border border-slate-800 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-white text-slate-900 border border-slate-200 shadow-sm'
+                : 'text-slate-500 hover:text-slate-800'
             }`}
           >
             <Route className="h-3.5 w-3.5" /> Track Geometries
@@ -348,61 +345,59 @@ export default function RouteFixerComponent({
         </div>
       </header>
 
-      {/* Main content body */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+      {/* Main content body (fills 100% remaining space) */}
+      <div className="flex-1 flex overflow-hidden relative">
         
         {/* Feedback Alert Overlay */}
         {statusMsg && (
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 animate-bounce">
-            <div className={`px-5 py-3 rounded-xl shadow-2xl border flex items-center gap-3 text-sm font-semibold ${
-              statusMsg.type === 'success' ? 'bg-emerald-950/95 text-emerald-400 border-emerald-500/30' :
-              statusMsg.type === 'error' ? 'bg-red-950/95 text-red-400 border-red-500/30' :
-              'bg-blue-950/95 text-blue-400 border-blue-500/30'
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50">
+            <div className={`px-5 py-3 rounded-xl shadow-lg border flex items-center gap-3 text-xs font-semibold ${
+              statusMsg.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+              statusMsg.type === 'error' ? 'bg-red-50 text-red-800 border-red-200' :
+              'bg-blue-50 text-blue-800 border-blue-200'
             }`}>
-              {statusMsg.type === 'success' && <CheckCircle2 className="h-5 w-5" />}
-              {statusMsg.type === 'error' && <AlertTriangle className="h-5 w-5" />}
+              {statusMsg.type === 'success' && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+              {statusMsg.type === 'error' && <AlertTriangle className="h-4 w-4 text-red-600" />}
               <p>{statusMsg.text}</p>
             </div>
           </div>
         )}
 
         {/* LEFT COLUMN: Item Lists */}
-        <aside className="w-full lg:w-[340px] bg-slate-900 border-r border-slate-800 flex flex-col">
-          
-          {/* Stops tab */}
+        <aside className="w-[320px] bg-white border-r border-slate-200 flex flex-col h-full shrink-0 overflow-hidden">
           {activeTab === 'stations' ? (
             <div className="flex flex-col h-full">
-              <div className="p-4 border-b border-slate-800 space-y-3 bg-slate-900/50">
+              <div className="p-4 border-b border-slate-200 space-y-3 bg-slate-50/50">
                 <div className="relative">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                   <input
                     type="text"
                     placeholder="Search stations by name..."
                     value={stopFilter}
                     onChange={(e) => setStopFilter(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
-                <div className="flex justify-between items-center text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                   <span>Listings</span>
                   <span>{filteredStops.length} stops</span>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
                 {filteredStops.map((s) => (
                   <button
                     key={s.id}
                     onClick={() => setSelectedStopId(s.id)}
-                    className={`w-full text-left p-4 transition-all hover:bg-slate-800/40 flex items-start justify-between ${
-                      selectedStopId === s.id ? 'bg-blue-600/10 border-l-2 border-blue-500' : ''
+                    className={`w-full text-left p-3.5 transition-all hover:bg-slate-50 flex items-start justify-between cursor-pointer ${
+                      selectedStopId === s.id ? 'bg-blue-50/70 border-l-3 border-blue-600' : ''
                     }`}
                   >
-                    <div>
-                      <h4 className="font-bold text-xs text-slate-200">{s.name}</h4>
-                      <p className="text-[10px] text-slate-500 mt-1">Code: {s.id}</p>
+                    <div className="flex-1 pr-2">
+                      <h4 className={`font-semibold text-xs transition-colors ${selectedStopId === s.id ? 'text-blue-900 font-bold' : 'text-slate-800'}`}>{s.name}</h4>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Code: {s.id}</p>
                     </div>
-                    <div className="text-right text-[10px] text-slate-400 font-mono space-y-0.5">
+                    <div className="text-right text-[10px] text-slate-500 font-mono space-y-0.5">
                       <div>Lat: {s.lat.toFixed(4)}</div>
                       <div>Lon: {s.lon.toFixed(4)}</div>
                     </div>
@@ -411,39 +406,38 @@ export default function RouteFixerComponent({
               </div>
             </div>
           ) : (
-            // Shapes tab
             <div className="flex flex-col h-full">
-              <div className="p-4 border-b border-slate-800 space-y-3 bg-slate-900/50">
+              <div className="p-4 border-b border-slate-200 space-y-3 bg-slate-50/50">
                 <div className="relative">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                   <input
                     type="text"
                     placeholder="Search track shape IDs..."
                     value={shapeFilter}
                     onChange={(e) => setShapeFilter(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
-                <div className="flex justify-between items-center text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                   <span>Track Geometries</span>
                   <span>{filteredShapes.length} shapes</span>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
                 {filteredShapes.map((s) => (
                   <button
                     key={s.shapeId}
                     onClick={() => setSelectedShapeId(s.shapeId)}
-                    className={`w-full text-left p-4 transition-all hover:bg-slate-800/40 flex items-center justify-between ${
-                      selectedShapeId === s.shapeId ? 'bg-blue-600/10 border-l-2 border-blue-500' : ''
+                    className={`w-full text-left p-3.5 transition-all hover:bg-slate-50 flex items-center justify-between cursor-pointer ${
+                      selectedShapeId === s.shapeId ? 'bg-blue-50/70 border-l-3 border-blue-600' : ''
                     }`}
                   >
-                    <div className="space-y-1">
-                      <h4 className="font-bold text-xs text-slate-200">{s.shapeId}</h4>
-                      <p className="text-[10px] text-slate-500">Linked to route segments</p>
+                    <div className="space-y-0.5">
+                      <h4 className={`font-semibold text-xs transition-colors ${selectedShapeId === s.shapeId ? 'text-blue-900 font-bold' : 'text-slate-800'}`}>{s.shapeId}</h4>
+                      <p className="text-[10px] text-slate-400">Linked to route segments</p>
                     </div>
-                    <span className="text-[10px] bg-slate-950 px-2 py-1 rounded border border-slate-800 font-mono text-slate-300">
+                    <span className="text-[9px] bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-mono text-slate-600 font-bold">
                       {s.points.length} pts
                     </span>
                   </button>
@@ -454,11 +448,12 @@ export default function RouteFixerComponent({
         </aside>
 
         {/* MIDDLE COLUMN: Leaflet Map Container */}
-        <main className="flex-1 min-h-[400px] lg:h-full relative z-10">
+        <main className="flex-1 h-full relative z-10 bg-slate-100">
           <MapContainer
             center={[6.93, 79.85]}
             zoom={9}
-            className="w-full h-full"
+            style={{ height: '100%', width: '100%' }}
+            className="z-10"
           >
             {/* CartoDB light Positron clean map tiles */}
             <TileLayer
@@ -477,14 +472,14 @@ export default function RouteFixerComponent({
                       center={[s.lat, s.lon]}
                       radius={4}
                       pathOptions={{
-                        color: '#64748b',
-                        fillColor: '#64748b',
-                        fillOpacity: 0.6,
+                        color: '#94a3b8',
+                        fillColor: '#cbd5e1',
+                        fillOpacity: 0.8,
                         weight: 1
                       }}
                     >
                       <Popup>
-                        <div className="text-xs font-bold text-slate-900">{s.name} (Stop ID: {s.id})</div>
+                        <div className="text-xs font-bold text-slate-800">{s.name} (Stop ID: {s.id})</div>
                       </Popup>
                     </CircleMarker>
                   )
@@ -502,7 +497,7 @@ export default function RouteFixerComponent({
                   >
                     <Popup>
                       <div className="text-center p-1 space-y-1">
-                        <span className="text-xs font-extrabold text-blue-600 block">{activeStop.name}</span>
+                        <span className="text-xs font-extrabold text-blue-700 block">{activeStop.name}</span>
                         <span className="text-[9px] text-slate-500 block">Drag to adjust coordinates</span>
                       </div>
                     </Popup>
@@ -521,10 +516,10 @@ export default function RouteFixerComponent({
                     center={[s.lat, s.lon]}
                     radius={3}
                     pathOptions={{
-                      color: '#475569',
-                      fillColor: '#94a3b8',
-                      fillOpacity: 0.8,
-                      weight: 1
+                      color: '#cbd5e1',
+                      fillColor: '#f1f5f9',
+                      fillOpacity: 1,
+                      weight: 1.5
                     }}
                   />
                 ))}
@@ -546,24 +541,24 @@ export default function RouteFixerComponent({
                       <CircleMarker
                         key={idx}
                         center={[p.lat, p.lon]}
-                        radius={4}
+                        radius={4.5}
                         pathOptions={{
                           color: '#ffffff',
                           fillColor: '#2563eb',
                           fillOpacity: 1,
-                          weight: 1.5
+                          weight: 2
                         }}
                       >
                         <Popup>
-                          <div className="space-y-1 text-slate-900">
-                            <p className="text-[10px] font-bold text-slate-400">INDEX: {idx + 1}</p>
+                          <div className="space-y-1.5 text-slate-800">
+                            <p className="text-[9px] font-bold text-slate-400">INDEX: {idx + 1}</p>
                             <p className="text-xs font-bold font-mono">Lat: {p.lat.toFixed(5)}</p>
                             <p className="text-xs font-bold font-mono">Lon: {p.lon.toFixed(5)}</p>
                             <button
                               onClick={() => {
                                 setEditShapePoints(prev => prev.filter((_, i) => i !== idx));
                               }}
-                              className="text-[9px] font-extrabold text-red-500 block hover:underline"
+                              className="text-[9px] font-extrabold text-red-600 block hover:underline cursor-pointer"
                             >
                               Delete Point
                             </button>
@@ -594,63 +589,63 @@ export default function RouteFixerComponent({
         </main>
 
         {/* RIGHT COLUMN: Inspector & Action Controls */}
-        <aside className="w-full lg:w-[380px] bg-slate-900 border-l border-slate-800 flex flex-col p-5 overflow-y-auto space-y-6">
+        <aside className="w-[360px] bg-white border-l border-slate-200 flex flex-col p-5 overflow-y-auto h-full shrink-0 space-y-5">
           
           {/* STATIONS TAB INSPECTOR */}
           {activeTab === 'stations' ? (
             activeStop ? (
-              <div className="space-y-6">
+              <div className="space-y-5">
                 <div>
-                  <h3 className="font-extrabold text-slate-100 text-sm">{activeStop.name}</h3>
-                  <p className="text-[10px] text-slate-500 uppercase mt-0.5">Stop ID: {activeStop.id}</p>
+                  <h3 className="font-extrabold text-slate-900 text-sm">{activeStop.name}</h3>
+                  <p className="text-[10px] text-slate-400 uppercase mt-0.5 tracking-wider font-bold">Stop ID: {activeStop.id}</p>
                 </div>
 
                 {/* Form fields */}
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Latitude</label>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Latitude</label>
                       <input
                         type="number"
                         step="any"
                         value={editLat}
                         onChange={(e) => setEditLat(parseFloat(e.target.value) || 0)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-blue-500"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 font-mono focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
                       />
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Longitude</label>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Longitude</label>
                       <input
                         type="number"
                         step="any"
                         value={editLon}
                         onChange={(e) => setEditLon(parseFloat(e.target.value) || 0)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-blue-500"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 font-mono focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
                       />
                     </div>
                   </div>
 
-                  <p className="text-[10px] text-slate-500 leading-relaxed italic">
-                    ℹ️ You can also adjust coordinates by dragging the blue marker on the map, or clicking anywhere on the track bed.
+                  <p className="text-[10px] text-slate-400 leading-relaxed italic">
+                    ℹ️ You can adjust the coordinates by dragging the blue marker, or clicking anywhere directly on the map.
                   </p>
 
                   <button
                     onClick={handleSaveStation}
                     disabled={isSubmitting}
-                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
                   >
                     <Save className="h-4 w-4" />
                     {isSubmitting ? 'Saving changes...' : 'Save Station Coordinates'}
                   </button>
                 </div>
 
-                <hr className="border-slate-800" />
+                <hr className="border-slate-100" />
 
                 {/* Nominatim search */}
-                <div className="space-y-4">
+                <div className="space-y-3.5">
                   <div>
-                    <h4 className="font-bold text-xs text-slate-300">OpenStreetMap Nominatim Lookup</h4>
-                    <p className="text-[10px] text-slate-500 mt-0.5">Search OSM to find exact matching coordinates for this station</p>
+                    <h4 className="font-bold text-xs text-slate-800">OpenStreetMap Nominatim Lookup</h4>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Search OSM to find exact matching coordinates for this station</p>
                   </div>
 
                   <div className="space-y-2">
@@ -659,12 +654,12 @@ export default function RouteFixerComponent({
                         type="text"
                         value={osmSearchQuery}
                         onChange={(e) => setOsmSearchQuery(e.target.value)}
-                        className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500"
                       />
                       <button
                         onClick={() => handleLookupOsm()}
                         disabled={searchingOsm}
-                        className="bg-slate-800 hover:bg-slate-700 text-white px-3 rounded-lg text-xs font-bold border border-slate-700 transition-all flex items-center justify-center cursor-pointer"
+                        className="bg-slate-800 hover:bg-slate-700 text-white px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center cursor-pointer"
                       >
                         {searchingOsm ? '...' : <Search className="h-3.5 w-3.5" />}
                       </button>
@@ -672,26 +667,26 @@ export default function RouteFixerComponent({
 
                     <button
                       onClick={() => handleLookupOsm(`${activeStop.name}, Sri Lanka`)}
-                      className="text-[10px] text-slate-400 hover:underline flex items-center gap-1.5 cursor-pointer"
+                      className="text-[9px] text-slate-500 hover:text-slate-800 hover:underline flex items-center gap-1.5 cursor-pointer font-semibold"
                     >
-                      <RotateCcw className="h-3 w-3" /> Retry with plain name fallback
+                      <RotateCcw className="h-2.5 w-2.5" /> Retry with plain name fallback
                     </button>
                   </div>
 
                   {/* Search results list */}
                   {osmSearchResults.length > 0 && (
-                    <div className="bg-slate-950 border border-slate-800 rounded-xl divide-y divide-slate-900 overflow-hidden shadow-inner max-h-[220px] overflow-y-auto">
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl divide-y divide-slate-200 overflow-hidden shadow-inner max-h-[220px] overflow-y-auto">
                       {osmSearchResults.map((r, idx) => (
                         <button
                           key={idx}
                           onClick={() => applyOsmResult(r.lat, r.lon)}
-                          className="w-full text-left p-3 hover:bg-slate-900/60 transition-all flex items-start justify-between gap-3 text-[11px]"
+                          className="w-full text-left p-3 hover:bg-slate-100/60 transition-all flex items-start justify-between gap-3 text-[11px] cursor-pointer"
                         >
                           <div className="space-y-0.5 flex-1 pr-2">
-                            <span className="font-bold text-slate-200 block truncate">{r.display_name}</span>
-                            <span className="text-[9px] text-slate-500 block">Class: {r.class} ({r.type})</span>
+                            <span className="font-semibold text-slate-700 block truncate leading-tight">{r.display_name}</span>
+                            <span className="text-[9px] text-slate-400 block font-medium">Class: {r.class} ({r.type})</span>
                           </div>
-                          <span className="text-[9px] text-blue-400 font-mono whitespace-nowrap bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded font-bold self-center">
+                          <span className="text-[9px] text-blue-600 font-mono whitespace-nowrap bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded font-bold self-center">
                             Apply
                           </span>
                         </button>
@@ -702,17 +697,17 @@ export default function RouteFixerComponent({
               </div>
             ) : (
               <div className="text-center py-16 space-y-3">
-                <MapPin className="h-8 w-8 text-slate-600 mx-auto" />
-                <p className="text-xs text-slate-400 font-semibold">Select a station from the list to start geocoding overrides.</p>
+                <MapPin className="h-8 w-8 text-slate-300 mx-auto" />
+                <p className="text-xs text-slate-400 font-semibold leading-relaxed">Select a station from the list to start geocoding overrides.</p>
               </div>
             )
           ) : (
             // SHAPES TAB INSPECTOR
             activeShape ? (
-              <div className="space-y-6">
+              <div className="space-y-5">
                 <div>
-                  <h3 className="font-extrabold text-slate-100 text-sm truncate">{activeShape.shapeId}</h3>
-                  <p className="text-[10px] text-slate-500 uppercase mt-0.5">Route shape geometry workbench</p>
+                  <h3 className="font-extrabold text-slate-900 text-sm truncate">{activeShape.shapeId}</h3>
+                  <p className="text-[10px] text-slate-400 uppercase mt-0.5 tracking-wider font-bold">Route shape geometry workbench</p>
                 </div>
 
                 {/* Operations */}
@@ -722,7 +717,7 @@ export default function RouteFixerComponent({
                       setEditShapePoints(prev => [...prev].reverse());
                       triggerStatus('Shape coordinates reversed.', 'info');
                     }}
-                    className="bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 px-3 rounded-lg text-[10px] flex items-center justify-center gap-1.5 border border-slate-700 transition-all cursor-pointer"
+                    className="bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold py-2 px-3 rounded-lg text-[10px] flex items-center justify-center gap-1.5 border border-slate-200 transition-all cursor-pointer"
                   >
                     <ArrowUpDown className="h-3 w-3" /> Reverse Order
                   </button>
@@ -731,41 +726,41 @@ export default function RouteFixerComponent({
                       setEditShapePoints([]);
                       triggerStatus('Shape points cleared.', 'info');
                     }}
-                    className="bg-slate-800 hover:bg-slate-700 text-red-400 hover:text-red-300 font-bold py-2 px-3 rounded-lg text-[10px] flex items-center justify-center gap-1.5 border border-slate-700 transition-all cursor-pointer"
+                    className="bg-slate-50 hover:bg-red-50 text-red-600 hover:text-red-700 font-bold py-2 px-3 rounded-lg text-[10px] flex items-center justify-center gap-1.5 border border-slate-200 transition-all cursor-pointer"
                   >
                     <Trash2 className="h-3 w-3" /> Clear Points
                   </button>
                 </div>
 
                 {/* Rebuild helper */}
-                <div className="p-3.5 bg-slate-950 border border-slate-800/80 rounded-xl space-y-2">
-                  <h4 className="text-xs font-bold text-slate-200">Reconstruct shape from Stop sequence</h4>
-                  <p className="text-[10px] text-slate-500 leading-relaxed">
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <h4 className="text-xs font-bold text-slate-800">Reconstruct shape from Stop sequence</h4>
+                  <p className="text-[10px] text-slate-400 leading-relaxed">
                     Build coordinates by connecting the stations in order of sequence for the longest trip of this route. Perfect for 100% correct consecutive paths.
                   </p>
                   <button
                     onClick={handleRebuildFromStops}
                     disabled={isSubmitting}
-                    className="w-full bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 font-bold py-1.5 px-3 rounded-lg text-[10px] border border-blue-500/20 transition-all cursor-pointer"
+                    className="w-full bg-blue-600/5 hover:bg-blue-600/10 text-blue-600 font-bold py-1.5 px-3 rounded-lg text-[10px] border border-blue-500/15 transition-all cursor-pointer"
                   >
                     Generate shape from stops
                   </button>
                 </div>
 
-                <hr className="border-slate-800" />
+                <hr className="border-slate-100" />
 
                 {/* Import section */}
                 <div className="space-y-3">
                   <div>
-                    <h4 className="font-bold text-xs text-slate-300">Import OSM geometry from Overpass API</h4>
-                    <p className="text-[10px] text-slate-500 mt-0.5">Lookup and import high-resolution curved track segments using way/relation ID</p>
+                    <h4 className="font-bold text-xs text-slate-800">Import OSM geometry from Overpass API</h4>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Lookup and import high-resolution curved track segments using way/relation ID</p>
                   </div>
 
                   <div className="flex gap-2">
                     <select
                       value={osmImportType}
                       onChange={(e: any) => setOsmImportType(e.target.value)}
-                      className="bg-slate-950 border border-slate-800 text-xs text-slate-300 p-2 rounded-lg"
+                      className="bg-slate-50 border border-slate-200 text-xs text-slate-700 p-2 rounded-lg"
                     >
                       <option value="way">Way ID</option>
                       <option value="relation">Relation ID</option>
@@ -775,20 +770,20 @@ export default function RouteFixerComponent({
                       placeholder="OSM ID (e.g. 6504048)"
                       value={osmImportId}
                       onChange={(e) => setOsmImportId(e.target.value)}
-                      className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white"
                     />
                     <button
                       onClick={handleFetchOsmImport}
                       disabled={isSubmitting}
-                      className="bg-slate-800 hover:bg-slate-700 text-white px-3.5 rounded-lg text-xs font-bold border border-slate-700 transition-all cursor-pointer"
+                      className="bg-slate-800 hover:bg-slate-700 text-white px-3.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
                     >
                       Fetch
                     </button>
                   </div>
 
                   {previewOsmPoints.length > 0 && (
-                    <div className="p-3 bg-emerald-950/40 border border-emerald-500/20 rounded-xl space-y-2">
-                      <p className="text-[10px] text-emerald-400 leading-tight">
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 animate-pulse">
+                      <p className="text-[10px] text-emerald-800 leading-tight">
                         Successfully fetched {previewOsmPoints.length} curved coordinates. Highlighted in dotted green.
                       </p>
                       <button
@@ -801,14 +796,14 @@ export default function RouteFixerComponent({
                   )}
                 </div>
 
-                <hr className="border-slate-800" />
+                <hr className="border-slate-100" />
 
                 {/* Save and coords inspector */}
                 <div className="space-y-4">
                   <button
                     onClick={handleSaveShape}
                     disabled={isSubmitting}
-                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
                   >
                     <Save className="h-4 w-4" />
                     {isSubmitting ? 'Saving shape...' : `Save Shape (${editShapePoints.length} points)`}
@@ -816,14 +811,14 @@ export default function RouteFixerComponent({
 
                   {/* Points list */}
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Shape point coordinates sequence</label>
-                    <div className="bg-slate-950 border border-slate-800 rounded-xl divide-y divide-slate-900 max-h-[220px] overflow-y-auto shadow-inner">
+                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Shape point coordinates sequence</label>
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl divide-y divide-slate-200 max-h-[220px] overflow-y-auto shadow-inner">
                       {editShapePoints.map((p, idx) => (
                         <div
                           key={idx}
-                          className="p-2.5 flex items-center justify-between text-[10px] font-mono text-slate-400"
+                          className="p-2.5 flex items-center justify-between text-[10px] font-mono text-slate-600"
                         >
-                          <span className="text-[9px] bg-slate-900 px-1.5 py-0.5 rounded font-bold text-slate-500">
+                          <span className="text-[9px] bg-slate-200 px-1.5 py-0.5 rounded font-bold text-slate-400">
                             {idx + 1}
                           </span>
                           <span>Lat: {p.lat.toFixed(5)}</span>
@@ -832,7 +827,7 @@ export default function RouteFixerComponent({
                             onClick={() => {
                               setEditShapePoints(prev => prev.filter((_, i) => i !== idx));
                             }}
-                            className="text-red-500 hover:text-red-400 hover:underline"
+                            className="text-red-600 hover:text-red-500 hover:underline cursor-pointer"
                           >
                             Delete
                           </button>
@@ -844,8 +839,8 @@ export default function RouteFixerComponent({
               </div>
             ) : (
               <div className="text-center py-16 space-y-3">
-                <Route className="h-8 w-8 text-slate-600 mx-auto" />
-                <p className="text-xs text-slate-400 font-semibold">Select a shape from the list to edit its track coordinates.</p>
+                <Route className="h-8 w-8 text-slate-300 mx-auto" />
+                <p className="text-xs text-slate-400 font-semibold leading-relaxed">Select a shape from the list to edit its track coordinates.</p>
               </div>
             )
           )}
