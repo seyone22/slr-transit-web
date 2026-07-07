@@ -329,9 +329,26 @@ export default function RouteFixerComponent({
       setEditLon(lon);
       pushToHistory('Map Click coords', { lat, lon });
     } else if (activeTab === 'shapes' && selectedShapeId) {
-      const newPoints = [...editShapePoints, { lat, lon }];
-      setEditShapePoints(newPoints);
-      pushToHistory('Add node from map', newPoints);
+      if (highlightedPointIndex !== null && highlightedPointIndex >= 0 && highlightedPointIndex < editShapePoints.length) {
+        // Insert new point immediately after the highlighted/selected node
+        const insertIdx = highlightedPointIndex + 1;
+        const updated = [...editShapePoints];
+        updated.splice(insertIdx, 0, { lat, lon });
+        
+        setEditShapePoints(updated);
+        // Automatically select the newly created node so the user can continue drawing from it
+        setHighlightedPointIndex(insertIdx);
+        pushToHistory(`Insert Node at index ${insertIdx + 1}`, updated);
+        triggerStatus(`Created new node at index ${insertIdx + 1} from selected node`, 'info');
+      } else {
+        // Fallback: append at the terminus
+        const newPoints = [...editShapePoints, { lat, lon }];
+        setEditShapePoints(newPoints);
+        // Select the newly added node
+        setHighlightedPointIndex(newPoints.length - 1);
+        pushToHistory('Add node to terminus', newPoints);
+        triggerStatus(`Created new node at terminus (index ${newPoints.length})`, 'info');
+      }
     }
   };
 
@@ -695,14 +712,42 @@ export default function RouteFixerComponent({
                     {/* Plot interactive nodes for shape coordinates */}
                     {editShapePoints.map((p, idx) => {
                       const isHighlighted = highlightedPointIndex === idx;
+                      if (isHighlighted) {
+                        return (
+                          <Marker
+                            key={`highlighted-${idx}`}
+                            position={[p.lat, p.lon]}
+                            draggable={true}
+                            eventHandlers={{
+                              dragend: (e) => {
+                                const marker = e.target;
+                                const latLng = marker.getLatLng();
+                                const updated = [...editShapePoints];
+                                updated[idx] = { lat: latLng.lat, lon: latLng.lng };
+                                setEditShapePoints(updated);
+                                pushToHistory(`Drag Node ${idx + 1}`, updated);
+                                triggerStatus(`Node ${idx + 1} coordinates updated via drag.`, 'info');
+                              }
+                            }}
+                          >
+                            <Popup>
+                              <div className="space-y-1.5 text-slate-800">
+                                <p className="text-[10px] font-extrabold text-blue-700">Node {idx + 1} (Selected)</p>
+                                <p className="text-[9px] text-slate-500">Drag marker to reposition node coordinates</p>
+                                <p className="text-[9px] text-slate-400 font-mono">Lat: {p.lat.toFixed(5)}<br/>Lon: {p.lon.toFixed(5)}</p>
+                              </div>
+                            </Popup>
+                          </Marker>
+                        );
+                      }
                       return (
                         <CircleMarker
                           key={idx}
                           center={[p.lat, p.lon]}
-                          radius={isHighlighted ? 8 : 4.5}
+                          radius={4.5}
                           pathOptions={{
-                            color: isHighlighted ? '#ffffff' : '#ffffff',
-                            fillColor: isHighlighted ? '#ea580c' : '#2563eb',
+                            color: '#ffffff',
+                            fillColor: '#2563eb',
                             fillOpacity: 1,
                             weight: 2
                           }}
@@ -713,28 +758,7 @@ export default function RouteFixerComponent({
                               setHighlightedPointIndex(idx);
                             }
                           }}
-                        >
-                          <Popup>
-                            <div className="space-y-1.5 text-slate-800">
-                              <p className="text-[9px] font-bold text-slate-400">INDEX: {idx + 1}</p>
-                              <p className="text-xs font-bold font-mono">Lat: {p.lat.toFixed(5)}</p>
-                              <p className="text-xs font-bold font-mono">Lon: {p.lon.toFixed(5)}</p>
-                              <div className="flex gap-2 mt-2">
-                                <button
-                                  onClick={() => {
-                                    const filtered = editShapePoints.filter((_, i) => i !== idx);
-                                    setEditShapePoints(filtered);
-                                    pushToHistory(`Delete node ${idx + 1}`, filtered);
-                                    setHighlightedPointIndex(null);
-                                  }}
-                                  className="text-[9px] font-extrabold text-red-600 hover:underline cursor-pointer"
-                                >
-                                  Delete Node
-                                </button>
-                              </div>
-                            </div>
-                          </Popup>
-                        </CircleMarker>
+                        />
                       );
                     })}
                   </>
@@ -971,6 +995,106 @@ export default function RouteFixerComponent({
                     </div>
                   )}
                 </div>
+
+                {/* Selected Node Sequence Link Editor */}
+                {activeTab === 'shapes' && highlightedPointIndex !== null && highlightedPointIndex < editShapePoints.length && (
+                  <div className="bg-orange-50/70 border border-orange-200 rounded-xl p-3.5 space-y-3 shrink-0">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[11px] font-extrabold text-orange-950 flex items-center gap-1.5">
+                        <Target className="h-3.5 w-3.5 text-orange-600" /> Selected Node #{highlightedPointIndex + 1}
+                      </span>
+                      <button
+                        onClick={() => setHighlightedPointIndex(null)}
+                        className="text-[9px] text-orange-600 hover:text-orange-800 font-extrabold cursor-pointer"
+                      >
+                        Deselect
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[10px] font-mono bg-white p-2 rounded-lg border border-orange-100/70">
+                      <div><span className="text-slate-400">Lat:</span> {editShapePoints[highlightedPointIndex].lat.toFixed(5)}</div>
+                      <div><span className="text-slate-400">Lon:</span> {editShapePoints[highlightedPointIndex].lon.toFixed(5)}</div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Move to Sequence position (1-{editShapePoints.length})</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          id="targetSeqPos"
+                          min="1"
+                          max={editShapePoints.length}
+                          defaultValue={highlightedPointIndex + 1}
+                          className="flex-1 min-w-0 bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-semibold focus:outline-none"
+                          placeholder="Target position"
+                        />
+                        <button
+                          onClick={() => {
+                            const el = document.getElementById('targetSeqPos') as HTMLInputElement;
+                            const val = parseInt(el?.value || '');
+                            if (isNaN(val) || val < 1 || val > editShapePoints.length) {
+                              triggerStatus('Invalid sequence position.', 'error');
+                              return;
+                            }
+                            const targetIdx = val - 1;
+                            if (targetIdx === highlightedPointIndex) return;
+
+                            const updated = [...editShapePoints];
+                            const [node] = updated.splice(highlightedPointIndex, 1);
+                            updated.splice(targetIdx, 0, node);
+
+                            setEditShapePoints(updated);
+                            setHighlightedPointIndex(targetIdx);
+                            pushToHistory(`Replaced Node ${highlightedPointIndex + 1} to index ${targetIdx + 1}`, updated);
+                            triggerStatus(`Re-linked: Node now positioned at index ${val}`, 'success');
+                          }}
+                          className="bg-orange-600 hover:bg-orange-700 text-white font-bold px-3 py-1 rounded-lg text-[10px] transition-all cursor-pointer shrink-0"
+                        >
+                          Re-link
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => {
+                          const idx = highlightedPointIndex;
+                          if (idx > 0) {
+                            const updated = [...editShapePoints];
+                            const temp = updated[idx];
+                            updated[idx] = updated[idx - 1];
+                            updated[idx - 1] = temp;
+                            setEditShapePoints(updated);
+                            setHighlightedPointIndex(idx - 1);
+                            pushToHistory(`Shift Node ${idx + 1} Up`, updated);
+                          }
+                        }}
+                        disabled={highlightedPointIndex === 0}
+                        className="bg-white hover:bg-slate-50 disabled:opacity-40 border border-slate-200 text-slate-700 font-bold py-1.5 rounded-lg text-[10px] transition-all cursor-pointer shadow-sm"
+                      >
+                        Shift Up
+                      </button>
+                      <button
+                        onClick={() => {
+                          const idx = highlightedPointIndex;
+                          if (idx < editShapePoints.length - 1) {
+                            const updated = [...editShapePoints];
+                            const temp = updated[idx];
+                            updated[idx] = updated[idx + 1];
+                            updated[idx + 1] = temp;
+                            setEditShapePoints(updated);
+                            setHighlightedPointIndex(idx + 1);
+                            pushToHistory(`Shift Node ${idx + 1} Down`, updated);
+                          }
+                        }}
+                        disabled={highlightedPointIndex === editShapePoints.length - 1}
+                        className="bg-white hover:bg-slate-50 disabled:opacity-40 border border-slate-200 text-slate-700 font-bold py-1.5 rounded-lg text-[10px] transition-all cursor-pointer shadow-sm"
+                      >
+                        Shift Down
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <hr className="border-slate-100 shrink-0" />
 
