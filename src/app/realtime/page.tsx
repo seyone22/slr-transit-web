@@ -19,7 +19,7 @@ interface Alert {
 }
 
 async function getRealtimeData() {
-  const apiBaseUrl = process.env.API_BASE_URL || 'http://127.0.0.1:3000/api/v1';
+  const apiBaseUrl = process.env.API_BASE_URL || 'https://slr-transit-server-production.up.railway.app/api/v1';
   try {
     const [updatesRes, alertsRes] = await Promise.all([
       fetch(`${apiBaseUrl}/realtime/trip-updates/list`, { next: { revalidate: 10 } }),
