@@ -1055,6 +1055,54 @@ export default function RouteFixerComponent({
                       </div>
                     </div>
 
+                    {/* Direct Link (Cut loop) */}
+                    <div className="space-y-1.5 pt-2 border-t border-orange-200/50">
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Direct Link (Cut loop)</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          id="directLinkPos"
+                          min="1"
+                          max={editShapePoints.length}
+                          className="flex-1 min-w-0 bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-semibold focus:outline-none"
+                          placeholder="Target Index (e.g. 5929)"
+                        />
+                        <button
+                          onClick={() => {
+                            const el = document.getElementById('directLinkPos') as HTMLInputElement;
+                            const val = parseInt(el?.value || '');
+                            if (isNaN(val) || val < 1 || val > editShapePoints.length) {
+                              triggerStatus('Invalid target index.', 'error');
+                              return;
+                            }
+                            const targetIdx = val - 1;
+                            if (targetIdx === highlightedPointIndex) return;
+
+                            const idxA = Math.min(highlightedPointIndex, targetIdx);
+                            const idxB = Math.max(highlightedPointIndex, targetIdx);
+
+                            // Slice out all points between idxA and idxB
+                            const updated = [
+                              ...editShapePoints.slice(0, idxA + 1),
+                              ...editShapePoints.slice(idxB)
+                            ];
+
+                            setEditShapePoints(updated);
+                            // Deselect or select the new target index position
+                            setHighlightedPointIndex(idxA + 1);
+                            pushToHistory(`Direct Link from Node ${idxA + 1} to Node ${idxB + 1} (Dropped ${idxB - idxA - 1} nodes)`, updated);
+                            triggerStatus(`Linked Node ${idxA + 1} directly to Node ${idxB + 1}. Dropped ${idxB - idxA - 1} intermediate nodes.`, 'success');
+                          }}
+                          className="bg-orange-600 hover:bg-orange-700 text-white font-bold px-3 py-1 rounded-lg text-[10px] transition-all cursor-pointer shrink-0"
+                        >
+                          Link Node
+                        </button>
+                      </div>
+                      <p className="text-[8.5px] text-slate-400 leading-tight">
+                        Links the selected node directly to the target node, discarding all intermediate nodes between them.
+                      </p>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         onClick={() => {
