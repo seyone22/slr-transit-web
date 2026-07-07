@@ -39,6 +39,36 @@ if (typeof window !== 'undefined') {
   });
 }
 
+// Helper functions to calculate distance from a clicked point to a line segment
+function sqr(x: number) { return x * x; }
+function dist2(v: { lat: number, lon: number }, w: { lat: number, lon: number }) { return sqr(v.lat - w.lat) + sqr(v.lon - w.lon); }
+function distToSegmentSquared(p: { lat: number, lon: number }, v: { lat: number, lon: number }, w: { lat: number, lon: number }) {
+  const l2 = dist2(v, w);
+  if (l2 === 0) return dist2(p, v);
+  let t = ((p.lat - v.lat) * (w.lat - v.lat) + (p.lon - v.lon) * (w.lon - v.lon)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return dist2(p, { lat: v.lat + t * (w.lat - v.lat), lon: v.lon + t * (w.lon - v.lon) });
+}
+function distToSegment(p: { lat: number, lon: number }, v: { lat: number, lon: number }, w: { lat: number, lon: number }) {
+  return Math.sqrt(distToSegmentSquared(p, v, w));
+}
+function findClosestSegment(clickLat: number, clickLon: number, points: { lat: number; lon: number }[]) {
+  let minDistance = Infinity;
+  let closestSegmentIdx = -1;
+  const p = { lat: clickLat, lon: clickLon };
+  
+  for (let i = 0; i < points.length - 1; i++) {
+    const v = points[i];
+    const w = points[i+1];
+    const dist = distToSegment(p, v, w);
+    if (dist < minDistance) {
+      minDistance = dist;
+      closestSegmentIdx = i;
+    }
+  }
+  return closestSegmentIdx;
+}
+
 // Inner helper component to handle map click events and viewport changes
 function MapEvents({
   onMapClick,
@@ -698,8 +728,14 @@ export default function RouteFixerComponent({
                     <Polyline
                       positions={editShapePoints.map(p => [p.lat, p.lon] as [number, number])}
                       eventHandlers={{
-                        click: () => {
-                          triggerStatus(`Currently editing ${selectedShapeId}`, 'info');
+                        click: (e) => {
+                          const clickLat = e.latlng.lat;
+                          const clickLon = e.latlng.lng;
+                          const segmentIdx = findClosestSegment(clickLat, clickLon, editShapePoints);
+                          if (segmentIdx !== -1) {
+                            setHighlightedPointIndex(segmentIdx);
+                            triggerStatus(`Selected segment between Node ${segmentIdx + 1} and Node ${segmentIdx + 2}`, 'info');
+                          }
                         }
                       }}
                       pathOptions={{
@@ -1055,53 +1091,138 @@ export default function RouteFixerComponent({
                       </div>
                     </div>
 
-                    {/* Direct Link (Cut loop) */}
+                    {/* Direct Link / Connection Editor */}
                     <div className="space-y-1.5 pt-2 border-t border-orange-200/50">
-                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Direct Link (Cut loop)</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          id="directLinkPos"
-                          min="1"
-                          max={editShapePoints.length}
-                          className="flex-1 min-w-0 bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-semibold focus:outline-none"
-                          placeholder="Target Index (e.g. 5929)"
-                        />
-                        <button
-                          onClick={() => {
-                            const el = document.getElementById('directLinkPos') as HTMLInputElement;
-                            const val = parseInt(el?.value || '');
-                            if (isNaN(val) || val < 1 || val > editShapePoints.length) {
-                              triggerStatus('Invalid target index.', 'error');
-                              return;
-                            }
-                            const targetIdx = val - 1;
-                            if (targetIdx === highlightedPointIndex) return;
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Direct Link Connector</label>
+                      
+                      <div className="space-y-2">
+                        {/* Target Node Index Input */}
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            id="directLinkPos"
+                            min="1"
+                            max={editShapePoints.length}
+                            className="flex-1 min-w-0 bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-semibold focus:outline-none"
+                            placeholder="Target Index (e.g. 5929)"
+                          />
+                          
+                          <select
+                            id="directLinkMode"
+                            className="bg-slate-50 border border-slate-200 text-[10px] text-slate-700 p-1 rounded-lg shrink-0"
+                          >
+                            <option value="reverse-loop">Reverse loop (No drop)</option>
+                            <option value="move-only">Shift target (No drop)</option>
+                            <option value="drop-intermediate">Drop intermediate (Cut loop)</option>
+                          </select>
+                          
+                          <button
+                            onClick={() => {
+                              const el = document.getElementById('directLinkPos') as HTMLInputElement;
+                              const val = parseInt(el?.value || '');
+                              if (isNaN(val) || val < 1 || val > editShapePoints.length) {
+                                triggerStatus('Invalid target index.', 'error');
+                                return;
+                              }
+                              const targetIdx = val - 1;
+                              if (targetIdx === highlightedPointIndex) return;
 
-                            const idxA = Math.min(highlightedPointIndex, targetIdx);
-                            const idxB = Math.max(highlightedPointIndex, targetIdx);
+                              const modeEl = document.getElementById('directLinkMode') as HTMLSelectElement;
+                              const mode = modeEl?.value || 'reverse-loop';
 
-                            // Slice out all points between idxA and idxB
-                            const updated = [
-                              ...editShapePoints.slice(0, idxA + 1),
-                              ...editShapePoints.slice(idxB)
-                            ];
+                              const idxA = Math.min(highlightedPointIndex, targetIdx);
+                              const idxB = Math.max(highlightedPointIndex, targetIdx);
 
-                            setEditShapePoints(updated);
-                            // Deselect or select the new target index position
-                            setHighlightedPointIndex(idxA + 1);
-                            pushToHistory(`Direct Link from Node ${idxA + 1} to Node ${idxB + 1} (Dropped ${idxB - idxA - 1} nodes)`, updated);
-                            triggerStatus(`Linked Node ${idxA + 1} directly to Node ${idxB + 1}. Dropped ${idxB - idxA - 1} intermediate nodes.`, 'success');
-                          }}
-                          className="bg-orange-600 hover:bg-orange-700 text-white font-bold px-3 py-1 rounded-lg text-[10px] transition-all cursor-pointer shrink-0"
-                        >
-                          Link Node
-                        </button>
+                              let updated: { lat: number; lon: number }[] = [];
+                              let desc = '';
+
+                              if (mode === 'drop-intermediate') {
+                                // Mode 1: Cut out and drop all nodes in between
+                                updated = [
+                                  ...editShapePoints.slice(0, idxA + 1),
+                                  ...editShapePoints.slice(idxB)
+                                ];
+                                desc = `Direct Link from Node ${idxA + 1} to Node ${idxB + 1} (Dropped intermediate loop)`;
+                              } else if (mode === 'reverse-loop') {
+                                // Mode 2: Link A directly to B, reverse the intermediate loop, connect loop end to B+1
+                                const loopPoints = editShapePoints.slice(idxA + 1, idxB);
+                                const reversedLoop = [...loopPoints].reverse();
+                                updated = [
+                                  ...editShapePoints.slice(0, idxA + 1), // keeps A
+                                  editShapePoints[idxB],                 // B (immediately after A)
+                                  ...reversedLoop,                       // loop points in reverse order
+                                  ...editShapePoints.slice(idxB + 1)     // remainder of path
+                                ];
+                                desc = `Direct Link from Node ${idxA + 1} to Node ${idxB + 1} (Reversed intermediate loop)`;
+                              } else {
+                                // Mode 3: Shift target B only to be immediately after A (no drop, keeps loop in original order after B)
+                                const loopPoints = editShapePoints.slice(idxA + 1, idxB);
+                                updated = [
+                                  ...editShapePoints.slice(0, idxA + 1), // keeps A
+                                  editShapePoints[idxB],                 // B (immediately after A)
+                                  ...loopPoints,                         // loop points in original order
+                                  ...editShapePoints.slice(idxB + 1)     // remainder of path
+                                ];
+                                desc = `Direct Link from Node ${idxA + 1} to Node ${idxB + 1} (Shift target node only)`;
+                              }
+
+                              setEditShapePoints(updated);
+                              setHighlightedPointIndex(idxA + 1);
+                              pushToHistory(desc, updated);
+                              triggerStatus(`Linked Node ${idxA + 1} directly to Node ${idxB + 1} using ${mode}.`, 'success');
+                            }}
+                            className="bg-orange-600 hover:bg-orange-700 text-white font-bold px-2.5 py-1 rounded-lg text-[10px] transition-all cursor-pointer shrink-0"
+                          >
+                            Link
+                          </button>
+                        </div>
                       </div>
                       <p className="text-[8.5px] text-slate-400 leading-tight">
-                        Links the selected node directly to the target node, discarding all intermediate nodes between them.
+                        Connects the selected node directly to the target node. Reverses or shifts intermediate nodes, or drops them entirely.
                       </p>
                     </div>
+
+                    {/* Link Dropper (Split segment) */}
+                    {highlightedPointIndex < editShapePoints.length - 1 && (
+                      <div className="space-y-1.5 pt-2 border-t border-orange-200/50">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Link Dropper (Split segment)</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => {
+                              const idx = highlightedPointIndex;
+                              if (idx < editShapePoints.length - 1) {
+                                const updated = [...editShapePoints];
+                                updated.splice(idx + 1, 1);
+                                setEditShapePoints(updated);
+                                pushToHistory(`Delete link successor node ${idx + 2}`, updated);
+                                triggerStatus(`Dropped link. Successor Node ${idx + 2} deleted.`, 'success');
+                              }
+                            }}
+                            className="bg-red-50 hover:bg-red-100 text-red-700 font-bold py-1.5 px-2.5 rounded-lg text-[10px] border border-red-200 transition-all cursor-pointer shadow-sm text-center"
+                          >
+                            Delete Next Node
+                          </button>
+                          <button
+                            onClick={() => {
+                              const idx = highlightedPointIndex;
+                              if (idx < editShapePoints.length - 1) {
+                                const updated = editShapePoints.slice(0, idx + 1);
+                                setEditShapePoints(updated);
+                                setHighlightedPointIndex(idx);
+                                pushToHistory(`Truncate path after Node ${idx + 1}`, updated);
+                                triggerStatus(`Path truncated. Dropped all nodes after Node ${idx + 1}.`, 'success');
+                              }
+                            }}
+                            className="bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold py-1.5 px-2.5 rounded-lg text-[10px] border border-slate-200 transition-all cursor-pointer shadow-sm text-center"
+                          >
+                            Truncate Path
+                          </button>
+                        </div>
+                        <p className="text-[8.5px] text-slate-400 leading-tight">
+                          Drop the connection between Node #{highlightedPointIndex + 1} and Node #{highlightedPointIndex + 2} by deleting the next node or truncating the track.
+                        </p>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-2">
                       <button
