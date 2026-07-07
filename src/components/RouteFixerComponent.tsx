@@ -23,8 +23,10 @@ import {
   AlertTriangle,
   RotateCcw,
   Sparkles,
-  ChevronRight,
-  Maximize2
+  Undo2,
+  Redo2,
+  History,
+  Target
 } from 'lucide-react';
 
 // Setup Leaflet marker icon asset fallbacks to prevent broken image links
@@ -62,6 +64,14 @@ function MapEvents({
   });
 
   return null;
+}
+
+interface HistoryEntry {
+  description: string;
+  tab: 'stations' | 'shapes';
+  selectedId: string;
+  stationCoord?: { lat: number; lon: number };
+  shapePoints?: { lat: number; lon: number }[];
 }
 
 interface RouteFixerComponentProps {
@@ -107,6 +117,13 @@ export default function RouteFixerComponent({
   const [osmImportId, setOsmImportId] = useState('');
   const [osmImportType, setOsmImportType] = useState<'way' | 'relation'>('way');
 
+  // Highlight shape point index
+  const [highlightedPointIndex, setHighlightedPointIndex] = useState<number | null>(null);
+
+  // Undo/Redo History Stack
+  const [historyStack, setHistoryStack] = useState<HistoryEntry[]>([]);
+  const [historyIndex, setHistoryIndex] = useState<number>(-1);
+
   // Feedback notifications
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -119,7 +136,27 @@ export default function RouteFixerComponent({
     return stops.find(s => s.id === selectedStopId) || null;
   }, [selectedStopId, stops]);
 
-  // Set coordinates when a stop is selected
+  // Get active shape details
+  const activeShape = useMemo(() => {
+    return shapes.find(s => s.shapeId === selectedShapeId) || null;
+  }, [selectedShapeId, shapes]);
+
+  // Helper to push states to Undo/Redo stack
+  const pushToHistory = (description: string, data: any) => {
+    const newStack = historyStack.slice(0, historyIndex + 1);
+    const entry: HistoryEntry = {
+      description,
+      tab: activeTab,
+      selectedId: activeTab === 'stations' ? selectedStopId || '' : selectedShapeId || '',
+      stationCoord: activeTab === 'stations' ? { ...data } : undefined,
+      shapePoints: activeTab === 'shapes' ? [...data] : undefined
+    };
+    const updated = [...newStack, entry];
+    setHistoryStack(updated);
+    setHistoryIndex(updated.length - 1);
+  };
+
+  // Set coordinates and reset history when a stop is selected
   useEffect(() => {
     if (activeStop) {
       setEditLat(activeStop.lat);
@@ -127,30 +164,97 @@ export default function RouteFixerComponent({
       setCenterCoord([activeStop.lat, activeStop.lon]);
       setOsmSearchQuery(`${activeStop.name} Railway Station, Sri Lanka`);
       setOsmSearchResults([]);
+      setHighlightedPointIndex(null);
+
+      // Initial history point
+      const initial: HistoryEntry = {
+        description: `Select ${activeStop.name}`,
+        tab: 'stations',
+        selectedId: activeStop.id,
+        stationCoord: { lat: activeStop.lat, lon: activeStop.lon }
+      };
+      setHistoryStack([initial]);
+      setHistoryIndex(0);
     }
-  }, [activeStop]);
+  }, [selectedStopId]);
 
-  // Get active shape details
-  const activeShape = useMemo(() => {
-    return shapes.find(s => s.shapeId === selectedShapeId) || null;
-  }, [selectedShapeId, shapes]);
-
-  // Load active shape points into local editor state
+  // Load active shape points and reset history when a shape is selected
   useEffect(() => {
     if (activeShape) {
       setEditShapePoints([...activeShape.points]);
       setPreviewOsmPoints([]);
       setOsmImportId('');
+      setHighlightedPointIndex(null);
       if (activeShape.points.length > 0) {
         setCenterCoord([activeShape.points[0].lat, activeShape.points[0].lon]);
       }
+
+      // Initial history point
+      const initial: HistoryEntry = {
+        description: `Select ${activeShape.shapeId}`,
+        tab: 'shapes',
+        selectedId: activeShape.shapeId,
+        shapePoints: [...activeShape.points]
+      };
+      setHistoryStack([initial]);
+      setHistoryIndex(0);
     }
-  }, [activeShape]);
+  }, [selectedShapeId]);
 
   // Trigger feedback banner
   const triggerStatus = (text: string, type: 'success' | 'error' | 'info') => {
     setStatusMsg({ text, type });
     setTimeout(() => setStatusMsg(null), 5000);
+  };
+
+  // Undo Action
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const prevIndex = historyIndex - 1;
+      const entry = historyStack[prevIndex];
+      setHistoryIndex(prevIndex);
+      
+      if (entry.tab === 'stations') {
+        setEditLat(entry.stationCoord!.lat);
+        setEditLon(entry.stationCoord!.lon);
+        setCenterCoord([entry.stationCoord!.lat, entry.stationCoord!.lon]);
+      } else {
+        setEditShapePoints([...entry.shapePoints!]);
+      }
+      triggerStatus(`Undone: ${historyStack[historyIndex].description}`, 'info');
+    }
+  };
+
+  // Redo Action
+  const handleRedo = () => {
+    if (historyIndex < historyStack.length - 1) {
+      const nextIndex = historyIndex + 1;
+      const entry = historyStack[nextIndex];
+      setHistoryIndex(nextIndex);
+      
+      if (entry.tab === 'stations') {
+        setEditLat(entry.stationCoord!.lat);
+        setEditLon(entry.stationCoord!.lon);
+        setCenterCoord([entry.stationCoord!.lat, entry.stationCoord!.lon]);
+      } else {
+        setEditShapePoints([...entry.shapePoints!]);
+      }
+      triggerStatus(`Redone: ${entry.description}`, 'info');
+    }
+  };
+
+  // Jump to specific state in history palette
+  const handleJumpToHistory = (idx: number) => {
+    const entry = historyStack[idx];
+    setHistoryIndex(idx);
+    if (entry.tab === 'stations') {
+      setEditLat(entry.stationCoord!.lat);
+      setEditLon(entry.stationCoord!.lon);
+      setCenterCoord([entry.stationCoord!.lat, entry.stationCoord!.lon]);
+    } else {
+      setEditShapePoints([...entry.shapePoints!]);
+    }
+    triggerStatus(`Jumped to: ${entry.description}`, 'info');
   };
 
   // 1. Save Selected Station Coordinates
@@ -203,6 +307,7 @@ export default function RouteFixerComponent({
     setEditLat(lat);
     setEditLon(lon);
     setCenterCoord([lat, lon]);
+    pushToHistory('OSM Geocoder Apply', { lat, lon });
     triggerStatus('Preview coordinates updated. Click Save to apply.', 'info');
   };
 
@@ -213,6 +318,7 @@ export default function RouteFixerComponent({
       const latLng = marker.getLatLng();
       setEditLat(latLng.lat);
       setEditLon(latLng.lng);
+      pushToHistory('Marker Drag', { lat: latLng.lat, lon: latLng.lng });
     }
   };
 
@@ -221,9 +327,11 @@ export default function RouteFixerComponent({
     if (activeTab === 'stations' && selectedStopId) {
       setEditLat(lat);
       setEditLon(lon);
+      pushToHistory('Map Click coords', { lat, lon });
     } else if (activeTab === 'shapes' && selectedShapeId) {
-      // Append point to active shape
-      setEditShapePoints(prev => [...prev, { lat, lon }]);
+      const newPoints = [...editShapePoints, { lat, lon }];
+      setEditShapePoints(newPoints);
+      pushToHistory('Add node from map', newPoints);
     }
   };
 
@@ -263,6 +371,7 @@ export default function RouteFixerComponent({
   const applyImportedOsmPoints = () => {
     if (previewOsmPoints.length === 0) return;
     setEditShapePoints([...previewOsmPoints]);
+    pushToHistory('Import OSM segment', previewOsmPoints);
     setPreviewOsmPoints([]);
     triggerStatus('OSM geometry applied. Remember to click Save shape to commit.', 'info');
   };
@@ -278,6 +387,7 @@ export default function RouteFixerComponent({
 
     if (res.success && res.points.length > 0) {
       setEditShapePoints(res.points);
+      pushToHistory('Stops reconstruction', res.points);
       triggerStatus('Shape reconstructed from stops. Click Save shape to commit.', 'success');
     } else {
       triggerStatus(res.error || 'Could not reconstruct shape from stops.', 'error');
@@ -314,6 +424,26 @@ export default function RouteFixerComponent({
           </div>
         </div>
 
+        {/* Action History Quick bar */}
+        <div className="flex items-center gap-2 mr-4">
+          <button
+            onClick={handleUndo}
+            disabled={historyIndex <= 0}
+            className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm cursor-pointer"
+            title="Undo last action"
+          >
+            <Undo2 className="h-3.5 w-3.5" /> Undo
+          </button>
+          <button
+            onClick={handleRedo}
+            disabled={historyIndex >= historyStack.length - 1}
+            className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm cursor-pointer"
+            title="Redo action"
+          >
+            <Redo2 className="h-3.5 w-3.5" /> Redo
+          </button>
+        </div>
+
         {/* Tab switcher */}
         <div className="bg-slate-100 p-1 rounded-xl border border-slate-200 flex gap-1">
           <button
@@ -345,7 +475,7 @@ export default function RouteFixerComponent({
         </div>
       </header>
 
-      {/* Main content body (fills 100% remaining space) */}
+      {/* Main content body */}
       <div className="flex-1 flex overflow-hidden relative">
         
         {/* Feedback Alert Overlay */}
@@ -524,48 +654,89 @@ export default function RouteFixerComponent({
                   />
                 ))}
 
-                {/* Draw current shape points line */}
-                {editShapePoints.length > 0 && (
+                {/* Render ALL other shapes as faint click-selectable lines */}
+                {shapes.map((s) => (
+                  s.shapeId !== selectedShapeId && (
+                    <Polyline
+                      key={s.shapeId}
+                      positions={s.points.map(p => [p.lat, p.lon] as [number, number])}
+                      eventHandlers={{
+                        click: () => {
+                          setSelectedShapeId(s.shapeId);
+                          triggerStatus(`Selected shape: ${s.shapeId}`, 'info');
+                        }
+                      }}
+                      pathOptions={{
+                        color: '#94a3b8',
+                        weight: 3,
+                        opacity: 0.4
+                      }}
+                    />
+                  )
+                ))}
+
+                {/* Draw currently selected editable shape line */}
+                {selectedShapeId && editShapePoints.length > 0 && (
                   <>
                     <Polyline
                       positions={editShapePoints.map(p => [p.lat, p.lon] as [number, number])}
+                      eventHandlers={{
+                        click: () => {
+                          triggerStatus(`Currently editing ${selectedShapeId}`, 'info');
+                        }
+                      }}
                       pathOptions={{
                         color: '#2563eb',
-                        weight: 4,
-                        opacity: 0.85
+                        weight: 6,
+                        opacity: 0.9
                       }}
                     />
 
                     {/* Plot interactive nodes for shape coordinates */}
-                    {editShapePoints.map((p, idx) => (
-                      <CircleMarker
-                        key={idx}
-                        center={[p.lat, p.lon]}
-                        radius={4.5}
-                        pathOptions={{
-                          color: '#ffffff',
-                          fillColor: '#2563eb',
-                          fillOpacity: 1,
-                          weight: 2
-                        }}
-                      >
-                        <Popup>
-                          <div className="space-y-1.5 text-slate-800">
-                            <p className="text-[9px] font-bold text-slate-400">INDEX: {idx + 1}</p>
-                            <p className="text-xs font-bold font-mono">Lat: {p.lat.toFixed(5)}</p>
-                            <p className="text-xs font-bold font-mono">Lon: {p.lon.toFixed(5)}</p>
-                            <button
-                              onClick={() => {
-                                setEditShapePoints(prev => prev.filter((_, i) => i !== idx));
-                              }}
-                              className="text-[9px] font-extrabold text-red-600 block hover:underline cursor-pointer"
-                            >
-                              Delete Point
-                            </button>
-                          </div>
-                        </Popup>
-                      </CircleMarker>
-                    ))}
+                    {editShapePoints.map((p, idx) => {
+                      const isHighlighted = highlightedPointIndex === idx;
+                      return (
+                        <CircleMarker
+                          key={idx}
+                          center={[p.lat, p.lon]}
+                          radius={isHighlighted ? 8 : 4.5}
+                          pathOptions={{
+                            color: isHighlighted ? '#ffffff' : '#ffffff',
+                            fillColor: isHighlighted ? '#ea580c' : '#2563eb',
+                            fillOpacity: 1,
+                            weight: 2
+                          }}
+                          eventHandlers={{
+                            click: (e) => {
+                              // Stop propagation to prevent map click event
+                              L.DomEvent.stopPropagation(e);
+                              setHighlightedPointIndex(idx);
+                            }
+                          }}
+                        >
+                          <Popup>
+                            <div className="space-y-1.5 text-slate-800">
+                              <p className="text-[9px] font-bold text-slate-400">INDEX: {idx + 1}</p>
+                              <p className="text-xs font-bold font-mono">Lat: {p.lat.toFixed(5)}</p>
+                              <p className="text-xs font-bold font-mono">Lon: {p.lon.toFixed(5)}</p>
+                              <div className="flex gap-2 mt-2">
+                                <button
+                                  onClick={() => {
+                                    const filtered = editShapePoints.filter((_, i) => i !== idx);
+                                    setEditShapePoints(filtered);
+                                    pushToHistory(`Delete node ${idx + 1}`, filtered);
+                                    setHighlightedPointIndex(null);
+                                  }}
+                                  className="text-[9px] font-extrabold text-red-600 hover:underline cursor-pointer"
+                                >
+                                  Delete Node
+                                </button>
+                              </div>
+                            </div>
+                          </Popup>
+                        </CircleMarker>
+                      );
+                    })}
                   </>
                 )}
 
@@ -594,14 +765,14 @@ export default function RouteFixerComponent({
           {/* STATIONS TAB INSPECTOR */}
           {activeTab === 'stations' ? (
             activeStop ? (
-              <div className="space-y-5">
-                <div>
+              <div className="space-y-5 flex-1 flex flex-col">
+                <div className="space-y-1 shrink-0">
                   <h3 className="font-extrabold text-slate-900 text-sm">{activeStop.name}</h3>
-                  <p className="text-[10px] text-slate-400 uppercase mt-0.5 tracking-wider font-bold">Stop ID: {activeStop.id}</p>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Stop ID: {activeStop.id}</p>
                 </div>
 
                 {/* Form fields */}
-                <div className="space-y-3">
+                <div className="space-y-3 shrink-0">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Latitude</label>
@@ -610,6 +781,7 @@ export default function RouteFixerComponent({
                         step="any"
                         value={editLat}
                         onChange={(e) => setEditLat(parseFloat(e.target.value) || 0)}
+                        onBlur={() => pushToHistory('Manual Latitude Edit', { lat: editLat, lon: editLon })}
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 font-mono focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
                       />
                     </div>
@@ -620,6 +792,7 @@ export default function RouteFixerComponent({
                         step="any"
                         value={editLon}
                         onChange={(e) => setEditLon(parseFloat(e.target.value) || 0)}
+                        onBlur={() => pushToHistory('Manual Longitude Edit', { lat: editLat, lon: editLon })}
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 font-mono focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
                       />
                     </div>
@@ -632,17 +805,17 @@ export default function RouteFixerComponent({
                   <button
                     onClick={handleSaveStation}
                     disabled={isSubmitting}
-                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer shrink-0"
                   >
                     <Save className="h-4 w-4" />
                     {isSubmitting ? 'Saving changes...' : 'Save Station Coordinates'}
                   </button>
                 </div>
 
-                <hr className="border-slate-100" />
+                <hr className="border-slate-100 shrink-0" />
 
                 {/* Nominatim search */}
-                <div className="space-y-3.5">
+                <div className="space-y-3.5 shrink-0">
                   <div>
                     <h4 className="font-bold text-xs text-slate-800">OpenStreetMap Nominatim Lookup</h4>
                     <p className="text-[10px] text-slate-400 mt-0.5">Search OSM to find exact matching coordinates for this station</p>
@@ -659,7 +832,7 @@ export default function RouteFixerComponent({
                       <button
                         onClick={() => handleLookupOsm()}
                         disabled={searchingOsm}
-                        className="bg-slate-800 hover:bg-slate-700 text-white px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center cursor-pointer"
+                        className="bg-slate-800 hover:bg-slate-700 text-white px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center cursor-pointer shrink-0"
                       >
                         {searchingOsm ? '...' : <Search className="h-3.5 w-3.5" />}
                       </button>
@@ -675,7 +848,7 @@ export default function RouteFixerComponent({
 
                   {/* Search results list */}
                   {osmSearchResults.length > 0 && (
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl divide-y divide-slate-200 overflow-hidden shadow-inner max-h-[220px] overflow-y-auto">
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl divide-y divide-slate-200 overflow-hidden shadow-inner max-h-[160px] overflow-y-auto">
                       {osmSearchResults.map((r, idx) => (
                         <button
                           key={idx}
@@ -704,17 +877,19 @@ export default function RouteFixerComponent({
           ) : (
             // SHAPES TAB INSPECTOR
             activeShape ? (
-              <div className="space-y-5">
-                <div>
+              <div className="space-y-5 flex-1 flex flex-col">
+                <div className="space-y-1 shrink-0">
                   <h3 className="font-extrabold text-slate-900 text-sm truncate">{activeShape.shapeId}</h3>
-                  <p className="text-[10px] text-slate-400 uppercase mt-0.5 tracking-wider font-bold">Route shape geometry workbench</p>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Route shape geometry workbench</p>
                 </div>
 
                 {/* Operations */}
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 shrink-0">
                   <button
                     onClick={() => {
-                      setEditShapePoints(prev => [...prev].reverse());
+                      const reversed = [...editShapePoints].reverse();
+                      setEditShapePoints(reversed);
+                      pushToHistory('Reverse track order', reversed);
                       triggerStatus('Shape coordinates reversed.', 'info');
                     }}
                     className="bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold py-2 px-3 rounded-lg text-[10px] flex items-center justify-center gap-1.5 border border-slate-200 transition-all cursor-pointer"
@@ -724,6 +899,7 @@ export default function RouteFixerComponent({
                   <button
                     onClick={() => {
                       setEditShapePoints([]);
+                      pushToHistory('Clear track shape', []);
                       triggerStatus('Shape points cleared.', 'info');
                     }}
                     className="bg-slate-50 hover:bg-red-50 text-red-600 hover:text-red-700 font-bold py-2 px-3 rounded-lg text-[10px] flex items-center justify-center gap-1.5 border border-slate-200 transition-all cursor-pointer"
@@ -733,10 +909,10 @@ export default function RouteFixerComponent({
                 </div>
 
                 {/* Rebuild helper */}
-                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 shrink-0">
                   <h4 className="text-xs font-bold text-slate-800">Reconstruct shape from Stop sequence</h4>
-                  <p className="text-[10px] text-slate-400 leading-relaxed">
-                    Build coordinates by connecting the stations in order of sequence for the longest trip of this route. Perfect for 100% correct consecutive paths.
+                  <p className="text-[10px] text-slate-400 leading-tight">
+                    Build coordinates by connecting the stations in order of sequence for the longest trip of this route.
                   </p>
                   <button
                     onClick={handleRebuildFromStops}
@@ -747,20 +923,20 @@ export default function RouteFixerComponent({
                   </button>
                 </div>
 
-                <hr className="border-slate-100" />
+                <hr className="border-slate-100 shrink-0" />
 
                 {/* Import section */}
-                <div className="space-y-3">
+                <div className="space-y-3 shrink-0">
                   <div>
                     <h4 className="font-bold text-xs text-slate-800">Import OSM geometry from Overpass API</h4>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Lookup and import high-resolution curved track segments using way/relation ID</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Lookup and import high-resolution curved track segments</p>
                   </div>
 
                   <div className="flex gap-2">
                     <select
                       value={osmImportType}
                       onChange={(e: any) => setOsmImportType(e.target.value)}
-                      className="bg-slate-50 border border-slate-200 text-xs text-slate-700 p-2 rounded-lg"
+                      className="bg-slate-50 border border-slate-200 text-xs text-slate-700 p-2 rounded-lg shrink-0"
                     >
                       <option value="way">Way ID</option>
                       <option value="relation">Relation ID</option>
@@ -770,21 +946,21 @@ export default function RouteFixerComponent({
                       placeholder="OSM ID (e.g. 6504048)"
                       value={osmImportId}
                       onChange={(e) => setOsmImportId(e.target.value)}
-                      className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white"
+                      className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white"
                     />
                     <button
                       onClick={handleFetchOsmImport}
                       disabled={isSubmitting}
-                      className="bg-slate-800 hover:bg-slate-700 text-white px-3.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                      className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0"
                     >
                       Fetch
                     </button>
                   </div>
 
                   {previewOsmPoints.length > 0 && (
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 animate-pulse">
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 shrink-0">
                       <p className="text-[10px] text-emerald-800 leading-tight">
-                        Successfully fetched {previewOsmPoints.length} curved coordinates. Highlighted in dotted green.
+                        Fetched {previewOsmPoints.length} coordinates. Highlighted in dotted green.
                       </p>
                       <button
                         onClick={applyImportedOsmPoints}
@@ -796,14 +972,14 @@ export default function RouteFixerComponent({
                   )}
                 </div>
 
-                <hr className="border-slate-100" />
+                <hr className="border-slate-100 shrink-0" />
 
                 {/* Save and coords inspector */}
-                <div className="space-y-4">
+                <div className="space-y-4 shrink-0">
                   <button
                     onClick={handleSaveShape}
                     disabled={isSubmitting}
-                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer shrink-0"
                   >
                     <Save className="h-4 w-4" />
                     {isSubmitting ? 'Saving shape...' : `Save Shape (${editShapePoints.length} points)`}
@@ -812,26 +988,36 @@ export default function RouteFixerComponent({
                   {/* Points list */}
                   <div className="space-y-2">
                     <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Shape point coordinates sequence</label>
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl divide-y divide-slate-200 max-h-[220px] overflow-y-auto shadow-inner">
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl divide-y divide-slate-200 max-h-[160px] overflow-y-auto shadow-inner">
                       {editShapePoints.map((p, idx) => (
-                        <div
+                        <button
                           key={idx}
-                          className="p-2.5 flex items-center justify-between text-[10px] font-mono text-slate-600"
+                          onClick={() => {
+                            setHighlightedPointIndex(idx);
+                            setCenterCoord([p.lat, p.lon]);
+                          }}
+                          className={`w-full p-2.5 flex items-center justify-between text-[10px] font-mono transition-all text-left cursor-pointer ${
+                            highlightedPointIndex === idx ? 'bg-orange-50 text-orange-950 font-bold border-l-2 border-orange-500' : 'text-slate-600 hover:bg-slate-100/50'
+                          }`}
                         >
-                          <span className="text-[9px] bg-slate-200 px-1.5 py-0.5 rounded font-bold text-slate-400">
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${highlightedPointIndex === idx ? 'bg-orange-200 text-orange-700' : 'bg-slate-200 text-slate-400'}`}>
                             {idx + 1}
                           </span>
                           <span>Lat: {p.lat.toFixed(5)}</span>
                           <span>Lon: {p.lon.toFixed(5)}</span>
                           <button
-                            onClick={() => {
-                              setEditShapePoints(prev => prev.filter((_, i) => i !== idx));
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const filtered = editShapePoints.filter((_, i) => i !== idx);
+                              setEditShapePoints(filtered);
+                              pushToHistory(`Delete node ${idx + 1}`, filtered);
+                              setHighlightedPointIndex(null);
                             }}
-                            className="text-red-600 hover:text-red-500 hover:underline cursor-pointer"
+                            className="text-red-600 hover:text-red-500 hover:underline text-[9px] font-bold"
                           >
                             Delete
                           </button>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -844,6 +1030,32 @@ export default function RouteFixerComponent({
               </div>
             )
           )}
+
+          {/* SHARED HISTORY PALETTE (Bottom pane of sidebar) */}
+          {historyStack.length > 0 && (
+            <div className="mt-auto pt-4 border-t border-slate-100 flex flex-col shrink-0 space-y-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                <History className="h-3.5 w-3.5 text-slate-400" /> Actions Timeline
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-[100px] overflow-y-auto text-[10px] shadow-inner">
+                {historyStack.map((entry, idx) => {
+                  const isActive = idx === historyIndex;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => handleJumpToHistory(idx)}
+                      className={`w-full text-left p-1.5 px-2.5 truncate font-medium transition-all cursor-pointer ${
+                        isActive ? 'bg-blue-50 text-blue-700 font-bold border-l-2 border-blue-600' : 'text-slate-500 hover:bg-slate-100/50'
+                      }`}
+                    >
+                      <span className="opacity-70 mr-1">{idx + 1}.</span> {entry.description}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
         </aside>
 
       </div>
