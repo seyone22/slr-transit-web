@@ -1,7 +1,15 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef } from 'react';
-import { MapContainer, TileLayer, Polyline, Marker, Tooltip, useMap } from 'react-leaflet';
+import React, { useEffect, useMemo, useRef, useCallback } from 'react';
+import {
+  MapContainer,
+  TileLayer,
+  Polyline,
+  Marker,
+  CircleMarker,
+  Tooltip,
+  useMap,
+} from 'react-leaflet';
 import L from 'leaflet';
 
 export interface LiveBus {
@@ -186,7 +194,35 @@ function MapController({
   return null;
 }
 
-export default function MetroMapInner({
+// Memoized individual bus marker to prevent unneeded DOM re-renders
+interface BusMarkerProps {
+  bus: LiveBus;
+  icon: L.DivIcon;
+  onSelect: (bus: LiveBus) => void;
+}
+
+const BusMarker = React.memo(function BusMarker({
+  bus,
+  icon,
+  onSelect,
+}: BusMarkerProps) {
+  const eventHandlers = useMemo(
+    () => ({
+      click: () => onSelect(bus),
+    }),
+    [bus, onSelect]
+  );
+
+  return (
+    <Marker
+      position={[bus.lat, bus.lng]}
+      icon={icon}
+      eventHandlers={eventHandlers}
+    />
+  );
+});
+
+function MetroMapInner({
   routes,
   stops,
   buses,
@@ -265,65 +301,69 @@ export default function MetroMapInner({
     });
   }, [visibleBuses, routesMap]);
 
-  // Create custom DivIcon for a live bus
-  const createBusIcon = (bus: LiveBus) => {
-    const color = routeColorMap.get(bus.route_code) || '#10b981';
-    const isMoving = bus.speed > 3;
-    const isSelected = selectedBus?.trip_id === bus.trip_id;
+  // Memoized Icon cache to prevent destroying/recreating DOM nodes on every update
+  const iconCache = useRef<Map<string, L.DivIcon>>(new Map());
 
-    const freeSeats = bus.available_seats;
-    const totalCap = bus.capacity_total || 70;
-    const badgeClass =
-      freeSeats > 20
-        ? 'badge-green'
-        : freeSeats > 5
-        ? 'badge-amber'
-        : 'badge-red';
+  const getBusIcon = useCallback(
+    (bus: LiveBus) => {
+      const color = routeColorMap.get(bus.route_code) || '#10b981';
+      const isMoving = bus.speed > 3;
+      const isSelected = selectedBus?.trip_id === bus.trip_id;
 
-    const badgeLabel =
-      freeSeats > 0 ? `${freeSeats}/${totalCap} free` : 'FULL (0 free)';
+      const freeSeats = bus.available_seats;
+      const totalCap = bus.capacity_total || 70;
+      const badgeClass =
+        freeSeats > 20
+          ? 'badge-green'
+          : freeSeats > 5
+          ? 'badge-amber'
+          : 'badge-red';
 
-    const html = `
-      <div class="metro-bus-anchor-root ${isSelected ? 'selected' : ''}">
-        ${
-          showBadges
-            ? `
-          <div class="metro-seat-badge ${badgeClass}">
-            <span class="metro-seat-dot"></span>
-            <span>${badgeLabel}</span>
+      const badgeLabel =
+        freeSeats > 0 ? `${freeSeats}/${totalCap} free` : 'FULL (0 free)';
+
+      const key = `${bus.license_plate}_${color}_${bus.bearing}_${badgeLabel}_${isSelected}_${showBadges}_${isMoving}`;
+
+      const cached = iconCache.current.get(key);
+      if (cached) return cached;
+
+      const html = `
+        <div class="metro-bus-anchor-root ${isSelected ? 'selected' : ''}">
+          ${
+            showBadges
+              ? `
+            <div class="metro-seat-badge ${badgeClass}">
+              <span class="metro-seat-dot"></span>
+              <span>${badgeLabel}</span>
+            </div>
+          `
+              : ''
+          }
+          <div class="metro-bus-pin ${isMoving ? 'is-moving' : ''}" style="background-color: ${color}; --pin-color: ${color}; transform: rotate(${bus.bearing}deg);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 19 21 12 17 5 21 12 2" fill="white" />
+            </svg>
           </div>
-        `
-            : ''
-        }
-        <div class="metro-bus-pin ${isMoving ? 'is-moving' : ''}" style="background-color: ${color}; --pin-color: ${color}; transform: rotate(${bus.bearing}deg);">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="12 2 19 21 12 17 5 21 12 2" fill="white" />
-          </svg>
+          <div class="metro-bus-plate" style="border-color: ${color};">
+            <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:${color}; margin-right:3px;"></span>
+            ${bus.license_plate}
+          </div>
         </div>
-        <div class="metro-bus-plate" style="border-color: ${color};">
-          <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:${color}; margin-right:3px;"></span>
-          ${bus.license_plate}
-        </div>
-      </div>
-    `;
+      `;
 
-    return L.divIcon({
-      className: 'metro-bus-icon',
-      html,
-      iconSize: [32, 32],
-      iconAnchor: [16, 16],
-    });
-  };
+      const icon = L.divIcon({
+        className: 'metro-bus-icon',
+        html,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+      });
 
-  // Station stop icon
-  const stationIcon = useMemo(() => {
-    return L.divIcon({
-      className: 'metro-station-icon',
-      html: '<div class="metro-station-dot"></div>',
-      iconSize: [8, 8],
-      iconAnchor: [4, 4],
-    });
-  }, []);
+      if (iconCache.current.size > 500) iconCache.current.clear();
+      iconCache.current.set(key, icon);
+      return icon;
+    },
+    [routeColorMap, selectedBus, showBadges]
+  );
 
   const tileBaseUrl =
     mapTheme === 'dark'
@@ -342,6 +382,7 @@ export default function MetroMapInner({
         zoom={12}
         className="w-full h-full"
         zoomControl={false}
+        preferCanvas={true}
       >
         {/* Clean ESRI Basemap (Zero watermark, No API key required) */}
         <TileLayer
@@ -433,13 +474,19 @@ export default function MetroMapInner({
           );
         })}
 
-        {/* 220 Station Stops Layer */}
+        {/* 220 Station Stops Layer (Canvas-backed for smooth 60fps rendering) */}
         {showStops &&
           stops.map((stop) => (
-            <Marker
+            <CircleMarker
               key={stop.id}
-              position={[stop.lat, stop.lng]}
-              icon={stationIcon}
+              center={[stop.lat, stop.lng]}
+              radius={3.5}
+              pathOptions={{
+                color: '#ffffff',
+                weight: 1.5,
+                fillColor: '#0f172a',
+                fillOpacity: 1,
+              }}
             >
               <Tooltip direction="top" offset={[0, -4]}>
                 <div className="text-xs font-semibold text-slate-900">
@@ -454,18 +501,16 @@ export default function MetroMapInner({
                   Stop #{stop.id} • {stop.code || 'LMT Platform'}
                 </div>
               </Tooltip>
-            </Marker>
+            </CircleMarker>
           ))}
 
-        {/* Live Moving Buses (Snapped to corridor geometry) */}
+        {/* Live Moving Buses (Snapped to corridor geometry, memoized components) */}
         {snappedBuses.map((bus) => (
-          <Marker
+          <BusMarker
             key={bus.trip_id}
-            position={[bus.lat, bus.lng]}
-            icon={createBusIcon(bus)}
-            eventHandlers={{
-              click: () => onSelectBus(bus),
-            }}
+            bus={bus}
+            icon={getBusIcon(bus)}
+            onSelect={onSelectBus}
           />
         ))}
 
@@ -480,3 +525,5 @@ export default function MetroMapInner({
     </div>
   );
 }
+
+export default React.memo(MetroMapInner);

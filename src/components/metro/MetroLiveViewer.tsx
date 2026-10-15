@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import {
   Bus,
@@ -63,7 +63,10 @@ export default function MetroLiveViewer() {
   const routes: RouteCorridor[] = useMemo(() => networkData.routes as any, []);
   const stops: StopPoint[] = useMemo(() => networkData.stops as any, []);
 
-  // Fetch live bus telemetry
+  const selectedBusRef = useRef<LiveBus | null>(null);
+  selectedBusRef.current = selectedBus;
+
+  // Fetch live bus telemetry (stable callback with zero interval churn)
   const fetchLiveBuses = useCallback(async () => {
     setIsSyncing(true);
     try {
@@ -75,9 +78,10 @@ export default function MetroLiveViewer() {
           setLastUpdated(new Date());
 
           // Keep selected bus updated with fresh GPS coordinates
-          if (selectedBus) {
+          const currentSelected = selectedBusRef.current;
+          if (currentSelected) {
             const updated = data.buses.find(
-              (b: LiveBus) => b.trip_id === selectedBus.trip_id
+              (b: LiveBus) => b.trip_id === currentSelected.trip_id
             );
             if (updated) setSelectedBus(updated);
           }
@@ -90,7 +94,7 @@ export default function MetroLiveViewer() {
       setLoading(false);
       setCountdown(5);
     }
-  }, [selectedBus]);
+  }, []);
 
   // Initial load
   useEffect(() => {

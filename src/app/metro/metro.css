@@ -92,19 +92,25 @@
   justify-content: center;
   position: relative;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6), 0 0 0 2px #ffffff;
-  transition: transform 0.4s ease;
+  transition: transform 0.3s ease;
+  will-change: transform;
 }
 
-/* Moving Pulse Beacon */
-.metro-bus-pin.is-moving::before {
+/* Moving bus indicator: clean hardware-accelerated glow ring (zero GPU CPU overhead) */
+.metro-bus-pin.is-moving {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6), 0 0 0 2px #ffffff, 0 0 0 3.5px var(--pin-color, #10b981);
+}
+
+/* Active Selected Bus: prominent animated radar beacon */
+.metro-bus-anchor-root.selected .metro-bus-pin::before {
   content: '';
   position: absolute;
-  inset: -6px;
+  inset: -8px;
   border-radius: 50%;
-  border: 2px solid var(--pin-color, #10b981);
-  opacity: 0.8;
-  animation: metroPulse 2s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+  border: 2.5px solid var(--pin-color, #10b981);
+  animation: metroPulse 1.6s cubic-bezier(0.24, 0, 0.38, 1) infinite;
   pointer-events: none;
+  will-change: transform, opacity;
 }
 
 @keyframes metroPulse {
