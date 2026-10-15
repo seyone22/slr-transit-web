@@ -38,8 +38,11 @@ export async function GET() {
         headers: { Accept: 'application/json' },
       });
       if (res.ok) {
-        rawList = await res.json();
-        if (Array.isArray(rawList)) break;
+        const parsed = await res.json();
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          rawList = parsed;
+          break;
+        }
       }
     } catch (e: any) {
       fetchError = e;
@@ -59,7 +62,8 @@ export async function GET() {
     );
   }
 
-    const buses = (Array.isArray(rawList) ? rawList : []).map((b: any) => {
+  try {
+    const buses = rawList.map((b: any) => {
       // Parse route code from trip_id if route_id not clear (e.g. LMT_CM05_1_WP-NE-6488 -> CM05)
       let routeCode = b.route_id || '';
       if (!routeCode.startsWith('CM')) {
@@ -92,7 +96,13 @@ export async function GET() {
         capacity_current: currentCap,
         capacity_total: totalCap,
         available_seats: freeSeats,
-        occupancy_status: b.occupancy_status || (freeSeats > 25 ? 'MANY_SEATS_AVAILABLE' : freeSeats > 5 ? 'FEW_SEATS_AVAILABLE' : 'FULL'),
+        occupancy_status:
+          b.occupancy_status ||
+          (freeSeats > 20
+            ? 'MANY_SEATS_AVAILABLE'
+            : freeSeats > 5
+            ? 'FEW_SEATS_AVAILABLE'
+            : 'FULL'),
         occupancy_pct: occupancyPct,
         timestamp: b.timestamp || new Date().toISOString(),
         updated_at: b.updated_at || new Date().toISOString(),
@@ -106,7 +116,7 @@ export async function GET() {
       buses,
     });
   } catch (error: any) {
-    console.error('Error fetching live vehicles:', error);
+    console.error('Error processing live vehicles:', error);
     return NextResponse.json(
       {
         success: false,
