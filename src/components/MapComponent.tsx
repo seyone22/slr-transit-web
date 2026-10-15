@@ -64,10 +64,17 @@ export default function MapComponent({ stops, shapes }: MapComponentProps) {
           zoom={9}
           className="w-full h-full"
         >
-          {/* CartoDB Positron tile layer for high premium clean aesthetics */}
+          {/* ESRI Light Canvas tile layer (Clean, zero API key, no watermark) */}
           <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+            attribution='&copy; <a href="https://www.esri.com/">Esri</a> &copy; OpenStreetMap'
+            maxZoom={16}
+          />
+          <TileLayer
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}"
+            attribution=""
+            opacity={0.8}
+            maxZoom={16}
           />
 
           {/* Draw Track Polylines */}

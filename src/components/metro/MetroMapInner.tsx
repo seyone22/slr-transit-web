@@ -212,10 +212,15 @@ export default function MetroMapInner({
     });
   }, []);
 
-  const tileUrl =
+  const tileBaseUrl =
     mapTheme === 'dark'
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+      ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+      : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+
+  const tileRefUrl =
+    mapTheme === 'dark'
+      ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}'
+      : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}';
 
   return (
     <div className="metro-map-container">
@@ -225,10 +230,18 @@ export default function MetroMapInner({
         className="w-full h-full"
         zoomControl={false}
       >
+        {/* Clean ESRI Basemap (Zero watermark, No API key required) */}
         <TileLayer
-          url={tileUrl}
-          attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> | LMT Fleet Telemetry'
-          maxZoom={19}
+          key={`base-${mapTheme}`}
+          url={tileBaseUrl}
+          attribution='&copy; <a href="https://www.esri.com/">Esri</a>, HERE, Garmin | LMT Fleet Telemetry'
+          maxZoom={16}
+        />
+        <TileLayer
+          key={`ref-${mapTheme}`}
+          url={tileRefUrl}
+          opacity={0.85}
+          maxZoom={16}
         />
 
         {/* 7 Colour-Coded CM Corridors */}
