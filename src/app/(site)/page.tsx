@@ -26,6 +26,42 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-12">
+      {/* Featured 1-Page Visual Map Demo Banner */}
+      <div className="relative group overflow-hidden rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 p-6 sm:p-8 border border-emerald-500/30 shadow-2xl">
+        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-3 max-w-2xl">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                LIVE DEMO • 5S CADENCE
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-white/10 text-slate-300">
+                LMT Metro Service
+              </span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              1-Page Visual Map Demo: <br className="hidden sm:inline" />
+              <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-sky-400 bg-clip-text text-transparent">
+                7 Colour-Coded Corridors & 70+ Live Buses
+              </span>
+            </h2>
+            <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
+              Designed for executive &amp; government briefings. Renders the full Colombo Metropolitan corridor network with live moving buses every 5 seconds and real-time seat crowding badges (<code className="text-emerald-400 font-mono text-xs">31/70 seats free</code>).
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-shrink-0">
+            <Link
+              href="/metro"
+              className="inline-flex items-center justify-center px-6 py-3.5 rounded-2xl font-bold bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:from-emerald-400 hover:to-teal-500 transition-all shadow-lg shadow-emerald-500/25 gap-2 text-sm sm:text-base group-hover:scale-[1.02]"
+            >
+              <span>Launch Live Map Demo</span>
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      </div>
+
       {/* Hero Section */}
       <section className="bg-primary text-white rounded-3xl p-8 sm:p-12 shadow-xl relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(56,189,248,0.2),transparent)] pointer-events-none" />

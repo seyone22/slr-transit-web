@@ -3,13 +3,14 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, X, Train, Clock, Map, Activity, Database, Info } from 'lucide-react';
+import { Menu, X, Train, Clock, Map, Activity, Database, Info, Bus } from 'lucide-react';
 
 export default function Navigation() {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
 
   const navLinks = [
+    { href: '/metro', label: 'LMT Metro Live Map', icon: Bus, isLive: true },
     { href: '/', label: 'Advocacy & Home', icon: Info },
     { href: '/schedule', label: 'Schedule Finder', icon: Clock },
     { href: '/map', label: 'Interactive Network Map', icon: Map },
@@ -43,6 +44,12 @@ export default function Navigation() {
                 >
                   <Icon className="h-4 w-4" />
                   <span>{link.label}</span>
+                  {link.isLive && (
+                    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-300 font-mono">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                      LIVE
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -111,7 +118,13 @@ export default function Navigation() {
                     }`}
                   >
                     <Icon className={`h-5 w-5 ${isActive ? 'text-primary' : 'text-slate-500'}`} />
-                    <span>{link.label}</span>
+                    <span className="flex-1">{link.label}</span>
+                    {link.isLive && (
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-300 font-mono">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                        LIVE
+                      </span>
+                    )}
                   </Link>
                 );
               })}
