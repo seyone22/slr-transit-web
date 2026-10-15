@@ -57,6 +57,65 @@ interface MetroMapInnerProps {
   recenterTrigger: number;
 }
 
+// Distance calculation helper for snapping
+function distSq(p1: [number, number], p2: [number, number]): number {
+  const dLat = p1[0] - p2[0];
+  const dLng = (p1[1] - p2[1]) * Math.cos((p1[0] * Math.PI) / 180);
+  return dLat * dLat + dLng * dLng;
+}
+
+// Find closest point on segment [a, b] to point p
+function getClosestPointOnSegment(
+  p: [number, number],
+  a: [number, number],
+  b: [number, number]
+): [number, number] {
+  const l2 = distSq(a, b);
+  if (l2 === 0) return a;
+  const cosLat = Math.cos((p[0] * Math.PI) / 180);
+  let t =
+    ((p[0] - a[0]) * (b[0] - a[0]) +
+      (p[1] - a[1]) * (b[1] - a[1]) * cosLat * cosLat) /
+    l2;
+  t = Math.max(0, Math.min(1, t));
+  return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+}
+
+// Snap point p to polylines, returns closest point, distance in meters, and segment bearing
+function snapToPolylines(
+  p: [number, number],
+  polylines: [number, number][][]
+): { closest: [number, number]; distMeters: number; segmentBearing?: number } {
+  let minDist = Infinity;
+  let closest = p;
+  let segBearing: number | undefined;
+
+  for (const poly of polylines) {
+    if (!poly || poly.length < 2) continue;
+    for (let i = 0; i < poly.length - 1; i++) {
+      const a = poly[i];
+      const b = poly[i + 1];
+      const pt = getClosestPointOnSegment(p, a, b);
+      const d = distSq(p, pt);
+      if (d < minDist) {
+        minDist = d;
+        closest = pt;
+        const dl = ((b[1] - a[1]) * Math.PI) / 180;
+        const y = Math.sin(dl) * Math.cos((b[0] * Math.PI) / 180);
+        const x =
+          Math.cos((a[0] * Math.PI) / 180) * Math.sin((b[0] * Math.PI) / 180) -
+          Math.sin((a[0] * Math.PI) / 180) *
+            Math.cos((b[0] * Math.PI) / 180) *
+            Math.cos(dl);
+        segBearing = Math.round(((Math.atan2(y, x) * 180) / Math.PI + 360) % 360);
+      }
+    }
+  }
+
+  const distMeters = Math.sqrt(minDist) * 111320;
+  return { closest, distMeters, segmentBearing: segBearing };
+}
+
 // Controller component to smoothly fly/pan
 function MapController({
   selectedBus,
@@ -145,12 +204,65 @@ export default function MetroMapInner({
     return buses.filter((b) => b.route_code === selectedCorridor);
   }, [buses, selectedCorridor]);
 
-  // Route color lookup map
+  // Route color and object lookup map
+  const routesMap = useMemo(() => {
+    const map = new Map<string, RouteCorridor>();
+    routes.forEach((r) => map.set(r.code, r));
+    return map;
+  }, [routes]);
+
   const routeColorMap = useMemo(() => {
     const map = new Map<string, string>();
     routes.forEach((r) => map.set(r.code, r.color));
     return map;
   }, [routes]);
+
+  // Snap buses to their assigned corridor track to eliminate GPS jitter and prevent ocean drift
+  const snappedBuses = useMemo(() => {
+    return visibleBuses.map((bus) => {
+      const route = routesMap.get(bus.route_code);
+      if (!route) return bus;
+
+      const candidateLines: [number, number][][] = [];
+      if (bus.direction_id === 1 && route.points_return && route.points_return.length > 1) {
+        candidateLines.push(route.points_return);
+        if (route.points && route.points.length > 1) candidateLines.push(route.points);
+      } else {
+        if (route.points && route.points.length > 1) candidateLines.push(route.points);
+        if (route.points_return && route.points_return.length > 1) candidateLines.push(route.points_return);
+      }
+
+      if (candidateLines.length === 0) return bus;
+
+      const snap = snapToPolylines([bus.lat, bus.lng], candidateLines);
+
+      // If within 350m of the corridor track, snap directly onto the road geometry
+      if (snap.distMeters <= 350) {
+        let adjustedBearing = bus.bearing;
+        if (bus.speed > 3 && snap.segmentBearing !== undefined) {
+          const diff = Math.abs(((bus.bearing - snap.segmentBearing + 180) % 360) - 180);
+          adjustedBearing = diff > 90 ? (snap.segmentBearing + 180) % 360 : snap.segmentBearing;
+        }
+        return {
+          ...bus,
+          lat: snap.closest[0],
+          lng: snap.closest[1],
+          bearing: adjustedBearing,
+        };
+      }
+
+      // Coastal failsafe: if bus raw GPS jitter drifted into the ocean west of Marine Drive
+      if (bus.lng < 79.851 && bus.lat < 6.94) {
+        return {
+          ...bus,
+          lat: snap.closest[0],
+          lng: snap.closest[1],
+        };
+      }
+
+      return bus;
+    });
+  }, [visibleBuses, routesMap]);
 
   // Create custom DivIcon for a live bus
   const createBusIcon = (bus: LiveBus) => {
@@ -344,8 +456,8 @@ export default function MetroMapInner({
             </Marker>
           ))}
 
-        {/* Live Moving Buses */}
-        {visibleBuses.map((bus) => (
+        {/* Live Moving Buses (Snapped to corridor geometry) */}
+        {snappedBuses.map((bus) => (
           <Marker
             key={bus.trip_id}
             position={[bus.lat, bus.lng]}
@@ -360,7 +472,7 @@ export default function MetroMapInner({
           selectedBus={selectedBus}
           selectedCorridor={selectedCorridor}
           routes={routes}
-          buses={visibleBuses}
+          buses={snappedBuses}
           recenterTrigger={recenterTrigger}
         />
       </MapContainer>
