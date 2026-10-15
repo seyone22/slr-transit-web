@@ -135,6 +135,7 @@ function MapController({
 
   // Initial fit to active buses or Colombo Metropolitan area
   useEffect(() => {
+    map.invalidateSize();
     if (!initialFitDone.current && buses.length > 0) {
       const bounds = L.latLngBounds(buses.map((b) => [b.lat, b.lng]));
       map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
@@ -283,7 +284,7 @@ export default function MetroMapInner({
       freeSeats > 0 ? `${freeSeats}/${totalCap} free` : 'FULL (0 free)';
 
     const html = `
-      <div class="metro-bus-marker-wrapper ${isSelected ? 'selected' : ''}">
+      <div class="metro-bus-anchor-root ${isSelected ? 'selected' : ''}">
         ${
           showBadges
             ? `
@@ -309,8 +310,8 @@ export default function MetroMapInner({
     return L.divIcon({
       className: 'metro-bus-icon',
       html,
-      iconSize: [80, 70],
-      iconAnchor: [40, 35],
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
     });
   };
 
