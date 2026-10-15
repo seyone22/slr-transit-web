@@ -3,24 +3,61 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export async function GET() {
-  const backendUrl =
-    process.env.API_BASE_URL ||
-    'https://slr-transit-server-production.up.railway.app/api/v1';
+function getCandidateUrls(): string[] {
+  const envUrl = process.env.API_BASE_URL || '';
+  const list: string[] = [];
 
-  try {
-    const res = await fetch(`${backendUrl}/realtime/vehicle-positions/list`, {
-      cache: 'no-store',
-      headers: {
-        Accept: 'application/json',
-      },
-    });
-
-    if (!res.ok) {
-      throw new Error(`Upstream returned ${res.status}`);
+  if (envUrl) {
+    let normalized = envUrl.trim();
+    if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+      normalized = `https://${normalized}`;
     }
+    if (!normalized.includes('/api/v1')) {
+      normalized = `${normalized.replace(/\/+$/, '')}/api/v1`;
+    }
+    list.push(normalized);
+  }
 
-    const rawList = await res.json();
+  // Known stable production endpoints
+  list.push('https://slr-transit-server-production.up.railway.app/api/v1');
+  list.push('https://api.transit.seyone.dev/api/v1');
+  list.push('http://slr-transit-server.railway.internal:8080/api/v1');
+
+  return [...new Set(list)];
+}
+
+export async function GET() {
+  const urls = getCandidateUrls();
+  let rawList: any = null;
+  let fetchError: any = null;
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(`${url}/realtime/vehicle-positions/list`, {
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      });
+      if (res.ok) {
+        rawList = await res.json();
+        if (Array.isArray(rawList)) break;
+      }
+    } catch (e: any) {
+      fetchError = e;
+    }
+  }
+
+  if (!rawList || !Array.isArray(rawList)) {
+    console.error('All upstream candidates failed. Last error:', fetchError);
+    return NextResponse.json(
+      {
+        success: false,
+        error: fetchError?.message || 'Upstream vehicle positions unavailable',
+        count: 0,
+        buses: [],
+      },
+      { status: 502 }
+    );
+  }
 
     const buses = (Array.isArray(rawList) ? rawList : []).map((b: any) => {
       // Parse route code from trip_id if route_id not clear (e.g. LMT_CM05_1_WP-NE-6488 -> CM05)
